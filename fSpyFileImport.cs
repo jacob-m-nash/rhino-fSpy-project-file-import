@@ -101,26 +101,23 @@ namespace fSpyFileImport
 
         private void AddImage(RhinoDoc doc, fSpyProject project)
         {
-            using (Eto.Drawing.Image img = new Bitmap(project.ImageFilePath))
+            using (Image img = new Bitmap(project.ImageFilePath))
             {
-                
                 var plane = CreateImagePlane(project.CameraParameters.CameraMatrix);
-                var id = doc.Objects.AddPictureFrame(plane, project.ImageFilePath, false, img.Width, img.Height, true, true);
+                _ = doc.Objects.AddPictureFrame(plane, project.ImageFilePath, false, img.Width, img.Height, true, true);
             }
            
         }
 
         public static Plane CreateImagePlane(double[,] cameraMatrix, double distance = 1.0)
         {
+            //var scale = UnitConverter.GetImportToModelScale(project.RefDistanceUnit, doc);
+            CalculateCameraPosition(cameraMatrix, 1, out var origin, out var xAxis, out var yAxis, out var zAxis);
 
-            Point3d origin = new Point3d(cameraMatrix[0, 3], cameraMatrix[1, 3], cameraMatrix[2, 3]);
-            Vector3d xAxis = new Vector3d(cameraMatrix[0, 0], cameraMatrix[1, 0], cameraMatrix[2, 0]);
-            Vector3d yAxis = new Vector3d(cameraMatrix[0, 1], cameraMatrix[1, 1], cameraMatrix[2, 1]);
-            Vector3d zAxis = -new Vector3d(cameraMatrix[0, 2], cameraMatrix[1, 2], cameraMatrix[2, 2]);
-            
+
             Point3d center = origin + zAxis * distance;
 
-            return new Plane(center, xAxis, yAxis);
+            return new Plane(center, xAxis, yAxis); //TODO is this the right location?
         }
 
 
@@ -128,7 +125,7 @@ namespace fSpyFileImport
         private void ChangeCameraSettings(RhinoDoc doc, fSpyProject project)
         {
             var viewportName = "Perspective";
-            var view = doc.Views.GetViewList(true,true).FirstOrDefault(v => v.MainViewport.Name == viewportName);
+            var view = doc.Views.GetViewList(true,true).FirstOrDefault(v => v.MainViewport.Name == viewportName); //TODO stop using deprecated method 
             if (view == null)
             {
                 throw new Exception($"Failed to get viewport: {viewportName}");
@@ -137,11 +134,10 @@ namespace fSpyFileImport
             var mat = project.CameraParameters.CameraMatrix;
 
             var scale = UnitConverter.GetImportToModelScale(project.RefDistanceUnit, doc);
-            Point3d location = new Point3d(mat[0, 3] * scale, mat[1, 3] * scale, mat[2, 3] * scale);
+            CalculateCameraPosition(mat, scale, out var location, out var xAxis, out var yAxis, out var zAxis);
 
-            Vector3d forward = -new Vector3d(mat[0, 2], mat[1, 2], mat[2, 2]);
-            Point3d target = location + forward;
-            Vector3d up = new Vector3d(mat[0, 1], mat[1, 1], mat[2, 1]);
+            Point3d target = location + zAxis;
+           
 
 #if DEBUG
             DebugDrawAxes(doc, mat, scale);
@@ -149,9 +145,9 @@ namespace fSpyFileImport
 
             var vp = view.ActiveViewport;
             vp.SetCameraLocation(location, false);
-            vp.SetCameraDirection(target - location, false);
+            vp.SetCameraDirection(zAxis, false);
             vp.SetCameraTarget(target, false);
-            vp.CameraUp = up;
+            vp.CameraUp = yAxis;
 
             // rhino default camera is a 36mm x 24mm film gate camera https://wiki.mcneel.com/rhino/rhinolensing 
             double focalLengthMm = project.CameraParameters.RelativeFocalLength * 36.0;
@@ -162,12 +158,9 @@ namespace fSpyFileImport
 
         public static void DebugDrawAxes(RhinoDoc doc, double[,] matrix, double scale, double length = 40)
         {
-  
-            Point3d origin = new Point3d(matrix[0, 3] * scale, matrix[1, 3] * scale, matrix[2, 3] * scale);
-            Vector3d xAxis = new Vector3d(matrix[0, 0], matrix[1, 0], matrix[2, 0]);       
-            Vector3d yAxis = new Vector3d(matrix[0, 1], matrix[1, 1], matrix[2, 1]);       
-            Vector3d zAxis = -new Vector3d(matrix[0, 2], matrix[1, 2], matrix[2, 2]);      
-            // Inner function to create or find a layer and add the line
+            
+            CalculateCameraPosition(matrix,scale, out var origin,out var xAxis,out var yAxis,out var zAxis);
+   
             void AddAxis(string layerName, Color color, Vector3d direction)
             {
                 int layerIndex = doc.Layers.FindByFullPath(layerName, -1);
@@ -187,6 +180,15 @@ namespace fSpyFileImport
             AddAxis("CameraZ_Axis", Color.Blue, zAxis);
 
             doc.Views.Redraw();
+        }
+
+        private static void CalculateCameraPosition(double[,] matrix, double scale, out Point3d location, out Vector3d xAxis,
+            out Vector3d yAxis, out Vector3d zAxis)
+        {
+            location = new Point3d(matrix[0, 3] * scale, matrix[1, 3] * scale, matrix[2, 3] * scale); 
+            xAxis = new Vector3d(matrix[0, 0], matrix[1, 0], matrix[2, 0]);
+            yAxis = new Vector3d(matrix[0, 1], matrix[1, 1], matrix[2, 1]);
+            zAxis = -new Vector3d(matrix[0, 2], matrix[1, 2], matrix[2, 2]);
         }
 
         private static fSpyProject ImportFSpyProject(string filePath)

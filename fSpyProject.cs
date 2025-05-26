@@ -17,7 +17,7 @@ namespace fSpyFileImport
         {
             CameraParameters = cameraParameters;
             ImageFilePath = imageFilePath;
-            this.RefDistanceUnit = refDistanceUnit;
+            RefDistanceUnit = refDistanceUnit;
         }
 
     }
