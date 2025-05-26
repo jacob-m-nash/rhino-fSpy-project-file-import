@@ -3,20 +3,15 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Commands;
-using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 using Rhino.Input.Custom;
 using Rhino.UI;
 using System;
-using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
-using static System.Net.Mime.MediaTypeNames;
 using Bitmap = Eto.Drawing.Bitmap;
 using Color = System.Drawing.Color;
 
@@ -108,18 +103,27 @@ namespace fSpyFileImport
         {
             using (Eto.Drawing.Image img = new Bitmap(project.ImageFilePath))
             {
-                int width = img.Width;
-                int height = img.Height;
-
-                Console.WriteLine($"Width: {width}px");
-                Console.WriteLine($"Height: {height}px");
-                var plane = Plane.WorldXY;
-                plane.Translate(new Vector3d(img.Width, img.Height, 0));
-
+                
+                var plane = CreateImagePlane(project.CameraParameters.CameraMatrix);
                 var id = doc.Objects.AddPictureFrame(plane, project.ImageFilePath, false, img.Width, img.Height, true, true);
             }
            
         }
+
+        public static Plane CreateImagePlane(double[,] cameraMatrix, double distance = 1.0)
+        {
+
+            Point3d origin = new Point3d(cameraMatrix[0, 3], cameraMatrix[1, 3], cameraMatrix[2, 3]);
+            Vector3d xAxis = new Vector3d(cameraMatrix[0, 0], cameraMatrix[1, 0], cameraMatrix[2, 0]);
+            Vector3d yAxis = new Vector3d(cameraMatrix[0, 1], cameraMatrix[1, 1], cameraMatrix[2, 1]);
+            Vector3d zAxis = -new Vector3d(cameraMatrix[0, 2], cameraMatrix[1, 2], cameraMatrix[2, 2]);
+            
+            Point3d center = origin + zAxis * distance;
+
+            return new Plane(center, xAxis, yAxis);
+        }
+
+
 
         private void ChangeCameraSettings(RhinoDoc doc, fSpyProject project)
         {
@@ -135,19 +139,13 @@ namespace fSpyFileImport
             var scale = UnitConverter.GetImportToModelScale(project.RefDistanceUnit, doc);
             Point3d location = new Point3d(mat[0, 3] * scale, mat[1, 3] * scale, mat[2, 3] * scale);
 
-
             Vector3d forward = -new Vector3d(mat[0, 2], mat[1, 2], mat[2, 2]);
             Point3d target = location + forward;
-
-
             Vector3d up = new Vector3d(mat[0, 1], mat[1, 1], mat[2, 1]);
 
 #if DEBUG
             DebugDrawAxes(doc, mat, scale);
 #endif
-
-
-
 
             var vp = view.ActiveViewport;
             vp.SetCameraLocation(location, false);
